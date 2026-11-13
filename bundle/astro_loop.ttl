@@ -1,0 +1,166 @@
+@prefix doap:  <http://usefulinc.com/ns/doap#> .
+@prefix lv2:   <http://lv2plug.in/ns/lv2core#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix pprop: <http://lv2plug.in/ns/ext/port-props#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix units: <http://lv2plug.in/ns/extensions/units#> .
+
+<urn:davidian:astro-loop>
+	a lv2:Plugin , lv2:DelayPlugin ;
+	doap:name "Davidian Astro-Loop" ;
+	doap:license <https://spdx.org/licenses/GPL-3.0-or-later> ;
+	rdfs:comment "Model of a classic three-head tape echo with spring reverb, from its 1978 service notes: endless tape loop with three playback heads and a twelve-position mode selector, tape saturation and motor ballistics, intensity regeneration, bass and treble on the echo, and a three-spring reverb. GPL-3.0-or-later. Made with generative AI (Claude Code); see AI_USAGE.md in the bundle." ;
+	lv2:minorVersion 0 ;
+	lv2:microVersion 1 ;
+	lv2:optionalFeature lv2:hardRTCapable ;
+	lv2:port [
+		a lv2:AudioPort , lv2:InputPort ;
+		lv2:index 0 ;
+		lv2:symbol "in_l" ;
+		lv2:name "In L"
+	] , [
+		a lv2:AudioPort , lv2:InputPort ;
+		lv2:index 1 ;
+		lv2:symbol "in_r" ;
+		lv2:name "In R"
+	] , [
+		a lv2:AudioPort , lv2:OutputPort ;
+		lv2:index 2 ;
+		lv2:symbol "out_l" ;
+		lv2:name "Out L"
+	] , [
+		a lv2:AudioPort , lv2:OutputPort ;
+		lv2:index 3 ;
+		lv2:symbol "out_r" ;
+		lv2:name "Out R"
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 4 ;
+		lv2:symbol "input" ;
+		lv2:name "Input Volume" ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 5 ;
+		lv2:symbol "mode" ;
+		lv2:name "Mode Selector" ;
+		lv2:default 4 ;
+		lv2:minimum 1 ;
+		lv2:maximum 12 ;
+		lv2:portProperty lv2:integer , lv2:enumeration ;
+		lv2:scalePoint [ rdfs:label "1: Head 1" ; rdf:value 1 ] ,
+			[ rdfs:label "2: Head 2" ; rdf:value 2 ] ,
+			[ rdfs:label "3: Head 3" ; rdf:value 3 ] ,
+			[ rdfs:label "4: Heads 2+3" ; rdf:value 4 ] ,
+			[ rdfs:label "5: H1 + Rev" ; rdf:value 5 ] ,
+			[ rdfs:label "6: H2 + Rev" ; rdf:value 6 ] ,
+			[ rdfs:label "7: H3 + Rev" ; rdf:value 7 ] ,
+			[ rdfs:label "8: H1+2 + Rev" ; rdf:value 8 ] ,
+			[ rdfs:label "9: H2+3 + Rev" ; rdf:value 9 ] ,
+			[ rdfs:label "10: H1+3 + Rev" ; rdf:value 10 ] ,
+			[ rdfs:label "11: H1+2+3 + Rev" ; rdf:value 11 ] ,
+			[ rdfs:label "12: Reverb Only" ; rdf:value 12 ]
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 6 ;
+		lv2:symbol "rate" ;
+		lv2:name "Repeat Rate" ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 7 ;
+		lv2:symbol "intensity" ;
+		lv2:name "Intensity" ;
+		lv2:default 0.35 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 8 ;
+		lv2:symbol "echo" ;
+		lv2:name "Echo Volume" ;
+		lv2:default 0.6 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 9 ;
+		lv2:symbol "reverb" ;
+		lv2:name "Reverb Volume" ;
+		lv2:default 0.3 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 10 ;
+		lv2:symbol "bass" ;
+		lv2:name "Bass" ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 11 ;
+		lv2:symbol "treble" ;
+		lv2:name "Treble" ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 12 ;
+		lv2:symbol "echo_on" ;
+		lv2:name "Echo On" ;
+		lv2:default 1 ;
+		lv2:minimum 0 ;
+		lv2:maximum 1 ;
+		lv2:portProperty lv2:integer , lv2:enumeration ;
+		lv2:scalePoint [ rdfs:label "Cancel" ; rdf:value 0 ] , [ rdfs:label "On" ; rdf:value 1 ]
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 13 ;
+		lv2:symbol "wow" ;
+		lv2:name "Wow and Flutter" ;
+		lv2:default 0.3 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 14 ;
+		lv2:symbol "age" ;
+		lv2:name "Tape Age" ;
+		lv2:default 0.2 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 15 ;
+		lv2:symbol "output" ;
+		lv2:name "Output" ;
+		lv2:default 0.0 ;
+		lv2:minimum -24.0 ;
+		lv2:maximum 12.0 ;
+		units:unit units:db
+	] , [
+		a lv2:ControlPort , lv2:InputPort ;
+		lv2:index 16 ;
+		lv2:symbol "enabled" ;
+		lv2:name "Enabled" ;
+		lv2:default 1 ;
+		lv2:minimum 0 ;
+		lv2:maximum 1 ;
+		lv2:designation lv2:enabled ;
+		lv2:portProperty lv2:toggled
+	] , [
+		a lv2:ControlPort , lv2:OutputPort ;
+		lv2:index 17 ;
+		lv2:symbol "vu" ;
+		lv2:name "Record Level" ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+		lv2:portProperty pprop:notOnGUI
+	] .
