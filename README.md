@@ -6,15 +6,50 @@ A model of a classic 1970s three-head tape echo with spring reverb, as an LV2, V
 
 ![The GUI](docs/gui.png)
 
-Stereo in and out with no latency. The tape and springs are mono, as on the unit: the two inputs are summed for the echo and reverb, the dry signal keeps its stereo image, and the wet signal goes to both outputs. Every format is built from the same code, shows the same GUI and sounds identical (the VST3 test compares them sample for sample). GPL-3.0-or-later.
+Stereo in and out with no latency. The tape and springs are mono, as on the unit: the two inputs are summed for the echo and reverb, the dry signal keeps its stereo image, and the wet signal goes to both outputs. Every format is built from the same code, shows the same GUI and sounds identical. GPL-3.0-or-later.
 
 | Format | Windows | macOS | Linux |
 |---|---|---|---|
-| LV2 | built and tested | builds with CMake (untested) | builds with CMake (untested) |
-| VST3 | built and tested | | |
-| Audio Unit (AUv2) | | source written, **not yet compiled** | |
+| LV2 | yes | yes | yes |
+| VST3 | yes | | |
+| Audio Unit (AUv2) | | yes | |
 
-The LV2 URI is `urn:davidian:astro-loop`, the bundle is `astro_loop.lv2`, and the VST3 is `Davidian Astro-Loop.vst3` (Delay category). The Audio Unit is listed under **Davidian** as **Astro-Loop** (manufacturer `Dvdn`, subtype `Astl`).
+The Windows builds are tested locally. The macOS and Linux builds are built and tested by GitHub Actions (see [Tests](#tests)).
+
+## Download
+
+Ready-made builds are on the [Releases page](https://github.com/evadavevadave/davidian-astro-loop/releases):
+
+| Download | Contains | For |
+|---|---|---|
+| `…-windows-x64.zip` | LV2, VST3 | Windows 10/11, 64-bit hosts |
+| `…-macos-universal.zip` | LV2, Audio Unit | macOS 10.13 or later, Apple silicon and Intel |
+| `…-linux-x64.zip` | LV2 | 64-bit Intel/AMD Linux (glibc 2.29 or later, e.g. Ubuntu 20.04 or Debian 11; X11 or XWayland for the GUI) |
+| `…-linux-arm64.zip` | LV2 | 64-bit ARM Linux, e.g. Raspberry Pi 4/5 with a 64-bit OS |
+
+Unzip, copy the plugin folder for your host's format into its plugin folder, and restart your host (or rescan plugins):
+
+| Format | Copy | Into |
+|---|---|---|
+| VST3 (Windows) | `Davidian Astro-Loop.vst3` | `C:\Program Files\Common Files\VST3` |
+| Audio Unit (macOS) | `Davidian Astro-Loop.component` | `~/Library/Audio/Plug-Ins/Components` (or `/Library/Audio/Plug-Ins/Components` for all users) |
+| LV2 (Windows) | `astro_loop.lv2` | `%APPDATA%\LV2` (create it if it doesn't exist) |
+| LV2 (macOS) | `astro_loop.lv2` | `~/Library/Audio/Plug-Ins/LV2` |
+| LV2 (Linux) | `astro_loop.lv2` | `~/.lv2` |
+
+In the host it is listed as **Davidian Astro-Loop** (VST3, LV2; under Delay effects in VST3 hosts) or under **Davidian** as **Astro-Loop** (Audio Unit; manufacturer code `Dvdn`, subtype `Astl`). The LV2 URI is `urn:davidian:astro-loop`.
+
+The macOS build isn't notarized, so macOS may block it after download. Run these once in Terminal after copying:
+
+```bash
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/"Davidian Astro-Loop.component"
+```
+
+```bash
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/LV2/astro_loop.lv2
+```
+
+Logic Pro and GarageBand only show an Audio Unit once macOS has registered it. If it doesn't appear, log out and back in, or restart the Mac. In Logic, Plug-in Manager can rescan it, and `auval -v aufx Astl Dvdn` in Terminal shows why it fails if it does.
 
 ## Controls
 
@@ -30,11 +65,13 @@ The LV2 URI is `urn:davidian:astro-loop`, the bundle is `astro_loop.lv2`, and th
 | Spring | Reverb | Reverb volume (VR9). The ON lamp shows whether the mode selector has the reverb in |
 | Transport | Wow | Wow and flutter, 0 to 10 (not on the unit; a worn transport has more) |
 | Transport | Tape Age | Not on the unit: darker repeats, more hiss and more flutter as the tape and heads wear |
-| (footswitch) | Echo | Echo on/cancel. Cancel stops new sound reaching the record head and lets the repeats already on the tape die away |
+| (footswitch) | Echo | Echo on/cancel, with a red LED. Cancel stops new sound reaching the record head and lets the repeats already on the tape die away |
 | Level | Output | Not on the unit: -24 to +12 dB |
-| (host) | Enabled / bypass | 20 ms crossfade to the dry input |
+| (host) | Enabled | Plugin bypass with a 20 ms crossfade to the dry input. In VST3 it is the host's bypass switch, and in an Audio Unit host's bypass turns it off. |
 
-The three amber lamps over the playback heads in the tape drawing show which heads the mode selector has switched in.
+The three amber lamps over the playback heads in the tape drawing show which heads the mode selector has switched in. The readout shows the name and value of the last control you touched.
+
+Drag a knob up or down, hold Shift to fine-tune, use the mouse wheel, and double-click to reset. In VST3 and Audio Unit hosts every move on the panel is a proper edit, so automation records it.
 
 ### Mode selector (from the service notes)
 
@@ -70,7 +107,7 @@ The service notes don't give the head spacing, so the speed range was worked out
 
 ### Estimates
 
-No published figure was found for these:
+No published figure was found for these, so they are reasoned estimates:
 
 - **Spring tank:** round-trip delays 33, 37 and 41 ms, a 2.4 s decay, and the allpass dispersion and band limits.
 - **Echo cancel footswitch:** the service notes show it wired to the power supply board but don't say what it switches. The plugin mutes the record input and lets the repeats decay. If the hardware cuts the repeats instead, this is the part to change.
@@ -85,57 +122,91 @@ No published figure was found for these:
 
 ## Build
 
-Plain C11 for the plugin, GUI and LV2 (no LV2 SDK needed); C++17 for the VST3 and Audio Unit wrappers. CMake downloads the Steinberg VST3 SDK 3.8.1 (MIT) and Apple's AudioUnitSDK 1.2.0 (Apache 2.0) while configuring.
+The LV2 build is plain C11 (the macOS window layer is compiled as Objective-C) and needs no LV2 SDK or other libraries. The VST3 and the Audio Unit need their SDKs, which CMake downloads while configuring: the Steinberg VST3 SDK 3.8.1 (MIT) and Apple's AudioUnitSDK 1.2.0 (Apache 2.0).
 
 | Source | What it is |
 |---|---|
-| `src/tape.h`, `src/spring.h`, `src/dsp.h` | Tape transport, spring tank, filters |
-| `src/engine.c`, `src/engine.h` | The signal path and controls, behind a small C API every format uses |
-| `src/params.h`, `src/ports.h` | Parameters and the LV2 port numbers they match; the mode selector table |
+| `src/tape.h`, `src/spring.h`, `src/dsp.h` | The model: tape transport, spring tank, filters |
+| `src/engine.c`, `src/engine.h` | The signal path, controls and the per-sample loop, behind a small C API that every format uses |
+| `src/params.h`, `src/ports.h` | Parameter names, ranges and text for VST3 and Audio Units, the LV2 port numbers they match, and the mode selector table |
 | `src/plugin.c`, `src/ui/ui_lv2.c` | LV2 plugin and GUI |
-| `src/vst3/`, `src/au/` | VST3 and Audio Unit wrappers |
-| `src/ui/panel.h`, `src/ui/view.c` | The panel and its window layer (Win32, Cocoa, X11) |
-| `src/ui/canvas.h`, `src/ui/font.h`, `src/ui/style.h` | Davidian GUI house style, shared with the Bi-Lumen |
+| `src/vst3/` | VST3 processor, controller and editor, and its CMake build |
+| `src/au/` | Audio Unit, its Cocoa view and its Info.plist |
+| `src/ui/panel.h`, `src/ui/view.c` | The panel and the window layer under it (Win32, Cocoa, X11), shared by every GUI |
+| `src/ui/canvas.h`, `src/ui/font.h`, `src/ui/style.h` | Davidian GUI house style: software renderer, stroke font and palette |
+| `src/lv2_abi.h` | The LV2 C interface, so no SDK is needed |
+| `bundle/` | LV2 metadata |
+| `licenses/` | The VST3 SDK and AudioUnitSDK licences, shipped inside the bundles that use them |
 
-### Windows
+### Windows (Visual Studio)
 
-`build.bat` builds `build\astro_loop.lv2` and the test programs with Visual Studio's C compiler. For the VST3 too, use CMake (3.25 or later):
+Needs Visual Studio 2017 or later with the C++ tools. `build.bat` builds the LV2 bundle, `build\astro_loop.lv2`, and the Windows-only LV2 checks, without CMake.
 
 ```bash
-cmake -S . -B build-cmake -A x64
+build.bat
+```
+
+### Every platform (CMake)
+
+Needs CMake 3.25 or later and a C/C++ compiler. On macOS, the Xcode command-line tools; add `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` for a universal build. On Linux, gcc or clang plus the X11 headers (`libx11-dev` on Debian/Ubuntu) for the GUI; without them CMake builds the plugin alone.
+
+```bash
+cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
 ```
 
 ```bash
 cmake --build build-cmake --config Release
 ```
 
+The VST3 lands in `build-cmake\VST3\Release` (Windows) and the Audio Unit in `build-cmake/AU` (macOS, signed ad hoc). They are on by default on Windows and macOS respectively; turn them off with `-DASTRO_LOOP_VST3=OFF` or `-DASTRO_LOOP_AU=OFF`, for example to build offline.
+
+To copy the LV2 bundle into `~/.lv2` (Linux):
+
+```bash
+cmake --install build-cmake --prefix ~/.lv2 -DLV2_INSTALL_DIR=.
+```
+
+Without `-DLV2_INSTALL_DIR=.`, `cmake --install` puts it in `<prefix>/lib/lv2`.
+
+## Tests
+
+Windows, with `build.bat`:
+
+```bash
+build-test\test_dsp.exe build\astro_loop.lv2
+```
+
+```bash
+build-test\lilv_check.exe build
+```
+
+```bash
+build-test\ui_check.exe build\astro_loop.lv2
+```
+
+Every platform, with CMake:
+
 ```bash
 ctest --test-dir build-cmake -C Release
 ```
 
-The VST3 lands in `build-cmake\VST3\Release\Davidian Astro-Loop.vst3`. Steinberg's validator runs after every build.
+- `test_dsp` checks echo times per head at both rate extremes and two sample rates, every mode selector position, the tone controls, where regeneration runs away, motor ballistics, stability with every control at full (44.1 and 192 kHz), bypass, and the built LV2 library.
+- `ui_render` draws the panel to a BMP file without opening a window, on any platform: `build-test\ui_render.exe out.bmp`.
+- `ui_check` (Windows) hosts the built GUI and drives it with mouse messages.
+- `lilv_check` (Windows) validates the bundle with the lilv LV2 parser, without installing anything.
+- `params_check` checks the VST3 and Audio Unit parameters against the LV2 ports and the panel.
+- `vst3_check` (Windows) hosts the VST3, clicks and drags on its editor and checks the edits it reports, then compares its sound with the LV2 build. The VST3 build also runs Steinberg's validator.
+- `au_check` (macOS) loads the Audio Unit from its bundle, compares its sound with the LV2 build (stereo, and mono input), and opens its view. CI also runs Apple's `auval` on it.
 
-### macOS and Linux
+Both sound comparisons cover parameter changes and the host's bypass, and expect the output to match the LV2 build exactly.
 
-```bash
-cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release && cmake --build build-cmake && ctest --test-dir build-cmake
-```
+GitHub Actions builds and tests all four platforms from the same source on every push (see `.github/workflows/build.yml`), and publishes a release when a version is tagged.
 
-On macOS this also builds `build-cmake/AU/Davidian Astro-Loop.component` and runs `au_check`, which compares it with the LV2 build. Run `auval -v aufx Astl Dvdn` after copying it to `~/Library/Audio/Plug-Ins/Components`. The Audio Unit has not yet been built on a Mac, so expect to fix a compile error or two there first.
+## Use of AI
 
-## Tests
+Made with generative AI (Claude Code), directed and reviewed by Davidian. See [AI_USAGE.md](AI_USAGE.md) for what the author and the AI each did, and what has and hasn't been checked.
 
-| Program | Checks |
-|---|---|
-| `test_dsp` | Echo times per head at both rate extremes and two sample rates, every mode position, tone controls, where regeneration runs away, motor ballistics, stability with every control at full (44.1 and 192 kHz), bypass, and the built library |
-| `params_check` | The VST3/AU parameter table against the LV2 TTL and the panel |
-| `ui_render` | Draws the panel to a BMP without a window |
-| `ui_check` (Windows) | Loads the LV2 GUI in a window and drives it with mouse messages |
-| `lilv_check` (Windows) | Validates the bundle with the lilv LV2 parser from an Ardour 9 install |
-| `vst3_check` (Windows) | Hosts the VST3: editor edits, parameters, and output identical to the LV2 build |
-| `au_check` (macOS) | Hosts the Audio Unit and compares it with the LV2 build |
-
-## Sources
+## References
 
 - The unit's service notes, second edition (July 1978): block diagram, echo board, miniature board and filter board circuit diagram, mode selector table, electrical adjustment and reference data. A scan is archived at the Internet Archive.
 - Downing and Terjesen, tape echo modelling project paper, University of Rochester ECE 472, 2016: motor time constants, wow spectrum, saturation curve, tone stack crossover.
@@ -143,4 +214,4 @@ On macOS this also builds `build-cmake/AU/Davidian Astro-Loop.component` and run
 
 ## Licence
 
-GPL-3.0-or-later. See [LICENSE](LICENSE), [NOTICE.md](NOTICE.md) for third-party material and trademarks, and [AI_USAGE.md](AI_USAGE.md): this plugin was made with generative AI (Claude Code).
+GPL-3.0-or-later. See [LICENSE](LICENSE), [NOTICE.md](NOTICE.md) and [AI_USAGE.md](AI_USAGE.md). Every source file carries an `SPDX-License-Identifier` line. `src/lv2_abi.h` is under the ISC licence, which is GPL-compatible, because it reproduces the LV2 interface declarations. The VST3 plugin includes code from the Steinberg VST3 SDK (MIT) and the Audio Unit from Apple's AudioUnitSDK (Apache 2.0), both GPL-3.0-compatible. The build copies `LICENSE`, `NOTICE.md` and `AI_USAGE.md` into every bundle. VST is a registered trademark of Steinberg Media Technologies GmbH.

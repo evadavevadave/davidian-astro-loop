@@ -146,7 +146,7 @@ static void test_view(AudioUnit au)
 
 int main(int argc, char** argv)
 {
-    AudioComponentDescription desc = { kAudioUnitType_Effect, 'Bilm', 'Dvdn', 0, 0 };
+    AudioComponentDescription desc = { kAudioUnitType_Effect, 'Astl', 'Dvdn', 0, 0 };
     CFURLRef url;
     CFBundleRef bundle;
     AudioComponentFactoryFunction factory;
