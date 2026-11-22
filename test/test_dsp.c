@@ -3,7 +3,7 @@
 /* Checks for the Astro-Loop. Usage: test_dsp <bundle folder>
  * Part 1 drives the engine directly: echo times per head and mode against the published
  * figures, the mode selector table, the tone controls against the service notes, where the
- * repeats run away, the motor ballistics, stability, and bypass. Part 2 loads the built plugin
+ * repeats run away, the motor ballistics, the spring tank, stability, and bypass. Part 2 loads the built plugin
  * library the way a host does. */
 #ifndef _CRT_SECURE_NO_WARNINGS
 #    define _CRT_SECURE_NO_WARNINGS
@@ -16,6 +16,7 @@
 #include "../src/engine.h"
 #include "../src/lv2_abi.h"
 #include "../src/params.h"
+#include "../src/spring.h"
 
 #ifdef _WIN32
 #    include <windows.h>
@@ -518,6 +519,36 @@ static void test_plugin(const char* bundle)
     }
 }
 
+/* The spring tank, shared with the Jade Choir: the first return one transit of the shortest
+ * spring after the impulse, and a decay inside the replacement tank's medium range (1.75-3 s). */
+static void test_spring(double fs)
+{
+    SpringTank t;
+    const long n = (long)(2.0 * fs);
+    long i, first = -1;
+    double a = 0.0, b = 0.0, rt60;
+    char msg[160];
+    if (!spring_init(&t, fs)) {
+        check("spring tank allocates", 0);
+        return;
+    }
+    spring_reset(&t);
+    for (i = 0; i < n; ++i) {
+        const double y = spring_run(&t, i == 0 ? 0.5 : 0.0);
+        if (first < 0 && fabs(y) > 1e-3)
+            first = i;
+        if (i >= (long)(0.5 * fs) && i < (long)(0.6 * fs))
+            a += y * y;
+        if (i >= (long)(1.5 * fs) && i < (long)(1.6 * fs))
+            b += y * y;
+    }
+    spring_free(&t);
+    rt60 = 60.0 / (-10.0 * log10(b / a));
+    snprintf(msg, sizeof msg, "spring tank at %.0f Hz: first return %.1f ms (expect %.1f), decay %.2f s",
+             fs, 1000.0 * first / fs, 1000.0 * TANK_TRANSIT[0], rt60);
+    check(msg, fabs((double)first / fs - TANK_TRANSIT[0]) < 0.002 && rt60 > 1.75 && rt60 < 3.0);
+}
+
 int main(int argc, char** argv)
 {
     test_echo_times(48000.0);
@@ -527,6 +558,8 @@ int main(int argc, char** argv)
     report_response();
     test_runaway();
     test_motor();
+    test_spring(44100.0);
+    test_spring(192000.0);
     test_stability(44100.0);
     test_stability(192000.0);
     test_bypass();

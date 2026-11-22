@@ -87,7 +87,7 @@ Drag a knob up or down, hold Shift to fine-tune, use the mouse wheel, and double
 - **Tape transport** (`src/tape.h`): an endless loop with a record head and three playback heads. The model stores the tape position of every recorded sample, and each playback head reads whatever was recorded a fixed distance upstream. Speed changes therefore glide in pitch the way tape does, and wow and flutter come out at the right size: the pitch moves by the difference between record and playback speed, not by the change in delay.
 - **Motor** (`src/engine.c`): the speed follows the repeat rate with measured time constants, 1.89 s when slowing and 1.07 s when speeding up. Wow is mostly random drift below 1 Hz, plus once-per-turn components from the pinch roller and capstan.
 - **Record and playback chain**: input volume, then the intensity feedback is added at the recording pre-amp input. Pre-emphasis follows, then tape saturation with an error-function curve, so loud treble compresses first. On playback come de-emphasis, a speed-dependent high-frequency loss (about 7 kHz at top speed, 3.5 kHz at the slowest), a small head bump and the coupling high-pass. Intensity taps the playback pre-amp ahead of the echo volume and tone controls, as in the circuit, so those two don't change the regeneration.
-- **Spring reverb** (`src/spring.h`): three springs, as in the unit's "Z" tank. Each spring is a delay loop around a chain of allpass filters, which gives the falling chirps. The drive IC clips gently. The reverb is fed from the recording pre-amp input, so it reverberates the repeats as well as the input. That follows the block diagram, but no published description confirms it.
+- **Spring reverb** (`src/spring.h`): the service notes name the tank as a Z-3F, the same part as in the Davidian Jade Choir (the two-channel chorus combo), and the springs are that model's. The Z-3F's listed replacement is a short three-spring tank with medium decay (1.75–3.0 s). Each spring is a delay line: the pickup coil hears it one transit after the drive coil, and the wave reflects and comes back round through stretched allpass filters (the falling chirps), a loop low-pass and a DC block. Neighbouring springs are read in opposite polarity. The decay measures 2.1 s. The drive IC clips gently. The reverb is fed from the recording pre-amp input, so it reverberates the repeats as well as the input. That follows the block diagram, but no published description confirms it.
 - **Tone**: bass and treble shelves set to hit the service notes' ±10 dB at 100 Hz and 5 kHz exactly, either side of the 750 Hz crossover measured for the unit's Baxandall stage.
 
 ### Checked against the service notes and published figures
@@ -109,7 +109,7 @@ The service notes don't give the head spacing, so the speed range was worked out
 
 No published figure was found for these, so they are reasoned estimates:
 
-- **Spring tank:** round-trip delays 33, 37 and 41 ms, a 2.4 s decay, and the allpass dispersion and band limits.
+- **Spring tank:** transit times 29.5, 33.7 and 37.1 ms, a 2.4 s design decay (the middle of the replacement tank's medium range), the allpass dispersion and the band limits, all shared with the Jade Choir's model of the same tank.
 - **Echo cancel footswitch:** the service notes show it wired to the power supply board but don't say what it switches. The plugin mutes the record input and lets the repeats decay. If the hardware cuts the repeats instead, this is the part to change.
 - **Record level and saturation point; pre-emphasis** (+8 dB above 2.5 kHz); **playback high-frequency loss and head bump; wow and flutter depths** (up to about 0.35% drift at full).
 - **Pot tapers:** input, echo and reverb volumes are audio taper, and the repeat rate is linear in speed.
@@ -190,7 +190,7 @@ Every platform, with CMake:
 ctest --test-dir build-cmake -C Release
 ```
 
-- `test_dsp` checks echo times per head at both rate extremes and two sample rates, every mode selector position, the tone controls, where regeneration runs away, motor ballistics, stability with every control at full (44.1 and 192 kHz), bypass, and the built LV2 library.
+- `test_dsp` checks echo times per head at both rate extremes and two sample rates, every mode selector position, the tone controls, where regeneration runs away, motor ballistics, the spring tank's first return and decay, stability with every control at full (44.1 and 192 kHz), bypass, and the built LV2 library.
 - `ui_render` draws the panel to a BMP file without opening a window, on any platform: `build-test\ui_render.exe out.bmp`.
 - `ui_check` (Windows) hosts the built GUI and drives it with mouse messages.
 - `lilv_check` (Windows) validates the bundle with the lilv LV2 parser, without installing anything.

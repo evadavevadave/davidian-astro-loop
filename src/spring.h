@@ -1,15 +1,18 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (C) 2026 Davidian. See LICENSE and NOTICE.md. */
-/* The three-spring reverberation unit (Z-3F in the service notes; its springs run in a "Z"),
- * driven by its power amplifier IC and recovered by a one-transistor amplifier (service
- * notes: reverberation unit, drive amp IC1, return amp Q10).
+/* The three-spring reverberation unit, driven by its power amplifier IC and recovered by a
+ * one-transistor amplifier (service notes: reverberation unit Z-3F, drive amp IC1, return amp
+ * Q10).
  *
- * Each spring is a delay loop with a chain of first-order allpass filters inside it. The
- * allpasses delay low frequencies more than high ones, as a helical spring does, so every
- * round trip comes back as a falling chirp and successive trips smear into the familiar
- * metallic "drip". The spring dimensions are not in the service notes and no published decay
- * figure was found: the delays, decay time and band limits below are estimates in the range of
- * short three-spring tanks. */
+ * The tank is the same part, the Z-3F, that the Davidian Jade Choir (the two-channel chorus combo)
+ * models, and the springs here are that model's: the Z-3F's listed replacement is a short
+ * (9-1/4") three-spring type 8 tank with medium decay (1.75-3.0 s). Each spring is a delay line
+ * that the drive coil writes into. The pickup coil hears it one transit later; the wave reflects
+ * and comes back round after two transits, through stretched first-order allpasses (the
+ * dispersion that turns each return into a falling chirp), a loop lowpass (steel loses highs on
+ * each trip) and a DC block. Neighbouring springs are read in opposite polarity, as the coil
+ * magnets alternate. Transit times, decay (the middle of the medium range) and the loop's band
+ * limits are estimates shared with the Jade Choir (see README). */
 #ifndef AL_SPRING_H
 #define AL_SPRING_H
 
@@ -18,56 +21,62 @@
 
 #include "dsp.h"
 
-#define SPRING_STAGES 24
-#define SPRING_MAX_SECONDS 0.06
+#define TANK_SPRINGS 3
+#define TANK_AP 24          /* allpass stages per spring */
+#define TANK_AP_COEF 0.62   /* allpass coefficient, at 24 kHz stretch spacing */
+#define TANK_T60 2.375      /* seconds */
+#define TANK_LP_HZ 4500.0   /* loop lowpass */
+#define TANK_MAX_STRETCH 4
+static const double TANK_TRANSIT[TANK_SPRINGS] = { 0.0295, 0.0337, 0.0371 }; /* seconds, one way */
+
+/* Level from the drive amp's input to the return amp's output, set so the reverb is as loud as
+ * this plugin's earlier tank at the same REVERB setting (see test_dsp). */
+#define TANK_GAIN 1.74
 
 typedef struct {
     float* buf;
-    unsigned mask, w, delay;
-    Allpass1 ap[SPRING_STAGES];
-    double lp_a, lp_z; /* one-pole lowpass in the loop: steel loses highs on each trip */
-    double g;          /* loop gain */
+    unsigned mask, w, d1, d2;
+    /* Stretched allpasses H(z) = (a + z^-k) / (1 + a z^-k), as k interleaved first-order
+     * sections, so the dispersion stays the same at every sample rate. */
+    double ap_x[TANK_AP][TANK_MAX_STRETCH], ap_y[TANK_AP][TANK_MAX_STRETCH];
+    int stretch, ph;
+    double g, lp, lp_k, dc_x, dc_y, norm;
 } Spring;
 
 typedef struct {
-    Spring s[3];
+    Spring s[TANK_SPRINGS];
     Biquad in_hp, out_lp, out_hp;
-    double drive;      /* gain into the drive IC */
 } SpringTank;
-
-/* Round-trip delays (s), allpass break frequencies (Hz) and decay time: estimates. */
-static const double SPRING_DELAY[3] = { 0.0331, 0.0373, 0.0413 };
-static const double SPRING_AP_HZ[3] = { 1450.0, 1300.0, 1150.0 };
-#define SPRING_RT60 2.4
 
 static int spring_init(SpringTank* t, double fs)
 {
-    int k, i;
-    for (k = 0; k < 3; ++k) {
-        Spring* s = &t->s[k];
+    int i;
+    for (i = 0; i < TANK_SPRINGS; ++i) {
+        Spring* s = &t->s[i];
+        const unsigned need = (unsigned)(2.0 * TANK_TRANSIT[i] * fs) + 8;
         unsigned n = 256;
-        while (n < (unsigned)(SPRING_MAX_SECONDS * fs) + 4)
+        double loop;
+        memset(s, 0, sizeof *s);
+        while (n < need)
             n <<= 1;
         s->buf = (float*)calloc(n, sizeof(float));
         if (!s->buf)
             return 0;
         s->mask = n - 1;
-        s->w = 0;
-        /* The allpass chain adds about SPRING_STAGES * (1 - a) / (1 + a) samples at low
-         * frequencies; take that off the plain delay so the round trip stays as set. */
-        {
-            const double a = ap1_coef(SPRING_AP_HZ[k], fs);
-            const double ap_delay = SPRING_STAGES * (1.0 - a) / (1.0 + a);
-            double d = SPRING_DELAY[k] * fs - ap_delay;
-            if (d < 2.0)
-                d = 2.0;
-            s->delay = (unsigned)d;
-            for (i = 0; i < SPRING_STAGES; ++i)
-                s->ap[i].a = a;
-        }
-        s->lp_a = smooth_coef(1.0 / (2.0 * AL_PI * 4200.0), fs);
-        s->g = pow(10.0, -3.0 * SPRING_DELAY[k] / SPRING_RT60);
+        s->d1 = (unsigned)(TANK_TRANSIT[i] * fs);
+        s->d2 = 2 * s->d1;
+        s->stretch = (int)(fs / 24000.0 + 0.5);
+        if (s->stretch < 1)
+            s->stretch = 1;
+        if (s->stretch > TANK_MAX_STRETCH)
+            s->stretch = TANK_MAX_STRETCH;
+        /* The loop time includes the allpasses' low-frequency group delay. */
+        loop = s->d2 / fs + TANK_AP * s->stretch * (1.0 - TANK_AP_COEF) / (1.0 + TANK_AP_COEF) / fs;
+        s->g = pow(10.0, -3.0 * loop / TANK_T60);
+        s->lp_k = 1.0 - exp(-2.0 * AL_PI * TANK_LP_HZ / fs);
+        s->norm = sqrt(1.0 - s->g * s->g) / sqrt((double)TANK_SPRINGS);
     }
+    /* The drive and return amps' coupling and the transducers' band limits (estimates). */
     bq_highpass(&t->in_hp, 180.0, 0.7071, fs);
     bq_lowpass(&t->out_lp, 4800.0, 0.7071, fs);
     bq_highpass(&t->out_hp, 120.0, 0.7071, fs);
@@ -76,14 +85,15 @@ static int spring_init(SpringTank* t, double fs)
 
 static void spring_reset(SpringTank* t)
 {
-    int k, i;
-    for (k = 0; k < 3; ++k) {
-        Spring* s = &t->s[k];
+    int i;
+    for (i = 0; i < TANK_SPRINGS; ++i) {
+        Spring* s = &t->s[i];
         memset(s->buf, 0, (s->mask + 1) * sizeof(float));
+        memset(s->ap_x, 0, sizeof s->ap_x);
+        memset(s->ap_y, 0, sizeof s->ap_y);
         s->w = 0;
-        s->lp_z = 0.0;
-        for (i = 0; i < SPRING_STAGES; ++i)
-            s->ap[i].z = 0.0;
+        s->ph = 0;
+        s->lp = s->dc_x = s->dc_y = 0.0;
     }
     bq_reset(&t->in_hp);
     bq_reset(&t->out_lp);
@@ -92,24 +102,37 @@ static void spring_reset(SpringTank* t)
 
 static void spring_free(SpringTank* t)
 {
-    int k;
-    for (k = 0; k < 3; ++k) {
-        free(t->s[k].buf);
-        t->s[k].buf = NULL;
+    int i;
+    for (i = 0; i < TANK_SPRINGS; ++i) {
+        free(t->s[i].buf);
+        t->s[i].buf = NULL;
     }
 }
 
-static inline double spring_one(Spring* s, double x)
+static inline double tank_tick(SpringTank* t, double x)
 {
-    double y = s->buf[(s->w - s->delay) & s->mask];
-    int i;
-    for (i = 0; i < SPRING_STAGES; ++i)
-        y = ap1_run(&s->ap[i], y);
-    s->lp_z += s->lp_a * (y - s->lp_z);
-    y = s->lp_z;
-    s->buf[s->w] = (float)(x + s->g * y + 1e-18); /* the tiny offset keeps the loop out of denormals */
-    s->w = (s->w + 1) & s->mask;
-    return y;
+    double out = 0.0;
+    int i, j;
+    for (i = 0; i < TANK_SPRINGS; ++i) {
+        Spring* s = &t->s[i];
+        const int k = s->ph;
+        double fb = s->buf[(s->w - s->d2) & s->mask], y;
+        for (j = 0; j < TANK_AP; ++j) {
+            const double yy = TANK_AP_COEF * (fb - s->ap_y[j][k]) + s->ap_x[j][k];
+            s->ap_x[j][k] = fb;
+            s->ap_y[j][k] = yy;
+            fb = yy;
+        }
+        s->ph = (s->ph + 1) % s->stretch;
+        s->lp += s->lp_k * (fb - s->lp);
+        y = s->lp - s->dc_x + 0.995 * s->dc_y;
+        s->dc_x = s->lp;
+        s->dc_y = y + 1e-18; /* the tiny offset keeps the loop out of denormals */
+        s->buf[s->w] = (float)(x + s->g * y);
+        out += (i & 1 ? -1.0 : 1.0) * s->norm * s->buf[(s->w - s->d1) & s->mask];
+        s->w = (s->w + 1) & s->mask;
+    }
+    return out;
 }
 
 /* x: the signal at the drive amp's input. Returns the return amp's output. */
@@ -117,7 +140,7 @@ static inline double spring_run(SpringTank* t, double x)
 {
     /* The drive IC (TA7200P) swings about 7 V p-p into the transducer: it clips gently. */
     const double d = soft_limit(bq_run(&t->in_hp, x), 1.0);
-    const double y = 0.6 * (spring_one(&t->s[0], d) - spring_one(&t->s[1], d) + 0.85 * spring_one(&t->s[2], d));
+    const double y = TANK_GAIN * tank_tick(t, d);
     return bq_run(&t->out_hp, bq_run(&t->out_lp, y));
 }
 
