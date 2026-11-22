@@ -36,21 +36,28 @@ static const double TANK_TRANSIT[TANK_SPRINGS] = { 0.0295, 0.0337, 0.0371 }; /* 
 typedef struct {
     float* buf;
     unsigned mask, w, d1, d2;
-    /* Stretched allpasses H(z) = (a + z^-k) / (1 + a z^-k), as k interleaved first-order
-     * sections, so the dispersion stays the same at every sample rate. */
-    double ap_x[TANK_AP][TANK_MAX_STRETCH], ap_y[TANK_AP][TANK_MAX_STRETCH];
-    int stretch, ph;
     double g, lp, lp_k, dc_x, dc_y, norm;
 } Spring;
 
 typedef struct {
     Spring s[TANK_SPRINGS];
+    /* Stretched allpasses H(z) = (a + z^-k) / (1 + a z^-k), as k interleaved first-order
+     * sections, so the dispersion stays the same at every sample rate. The state is laid out
+     * [phase][stage][spring] so the three springs' chains run side by side: they are
+     * independent, so the processor can overlap them instead of waiting on one long chain. */
+    double ap_x[TANK_MAX_STRETCH][TANK_AP][TANK_SPRINGS], ap_y[TANK_MAX_STRETCH][TANK_AP][TANK_SPRINGS];
+    int stretch, ph;
     Biquad in_hp, out_lp, out_hp;
 } SpringTank;
 
 static int spring_init(SpringTank* t, double fs)
 {
     int i;
+    t->stretch = (int)(fs / 24000.0 + 0.5);
+    if (t->stretch < 1)
+        t->stretch = 1;
+    if (t->stretch > TANK_MAX_STRETCH)
+        t->stretch = TANK_MAX_STRETCH;
     for (i = 0; i < TANK_SPRINGS; ++i) {
         Spring* s = &t->s[i];
         const unsigned need = (unsigned)(2.0 * TANK_TRANSIT[i] * fs) + 8;
@@ -65,13 +72,8 @@ static int spring_init(SpringTank* t, double fs)
         s->mask = n - 1;
         s->d1 = (unsigned)(TANK_TRANSIT[i] * fs);
         s->d2 = 2 * s->d1;
-        s->stretch = (int)(fs / 24000.0 + 0.5);
-        if (s->stretch < 1)
-            s->stretch = 1;
-        if (s->stretch > TANK_MAX_STRETCH)
-            s->stretch = TANK_MAX_STRETCH;
         /* The loop time includes the allpasses' low-frequency group delay. */
-        loop = s->d2 / fs + TANK_AP * s->stretch * (1.0 - TANK_AP_COEF) / (1.0 + TANK_AP_COEF) / fs;
+        loop = s->d2 / fs + TANK_AP * t->stretch * (1.0 - TANK_AP_COEF) / (1.0 + TANK_AP_COEF) / fs;
         s->g = pow(10.0, -3.0 * loop / TANK_T60);
         s->lp_k = 1.0 - exp(-2.0 * AL_PI * TANK_LP_HZ / fs);
         s->norm = sqrt(1.0 - s->g * s->g) / sqrt((double)TANK_SPRINGS);
@@ -89,12 +91,12 @@ static void spring_reset(SpringTank* t)
     for (i = 0; i < TANK_SPRINGS; ++i) {
         Spring* s = &t->s[i];
         memset(s->buf, 0, (s->mask + 1) * sizeof(float));
-        memset(s->ap_x, 0, sizeof s->ap_x);
-        memset(s->ap_y, 0, sizeof s->ap_y);
         s->w = 0;
-        s->ph = 0;
         s->lp = s->dc_x = s->dc_y = 0.0;
     }
+    memset(t->ap_x, 0, sizeof t->ap_x);
+    memset(t->ap_y, 0, sizeof t->ap_y);
+    t->ph = 0;
     bq_reset(&t->in_hp);
     bq_reset(&t->out_lp);
     bq_reset(&t->out_hp);
@@ -111,20 +113,32 @@ static void spring_free(SpringTank* t)
 
 static inline double tank_tick(SpringTank* t, double x)
 {
-    double out = 0.0;
+    double (*ax)[TANK_SPRINGS] = t->ap_x[t->ph], (*ay)[TANK_SPRINGS] = t->ap_y[t->ph];
+    double f0 = t->s[0].buf[(t->s[0].w - t->s[0].d2) & t->s[0].mask];
+    double f1 = t->s[1].buf[(t->s[1].w - t->s[1].d2) & t->s[1].mask];
+    double f2 = t->s[2].buf[(t->s[2].w - t->s[2].d2) & t->s[2].mask];
+    double fb[TANK_SPRINGS], out = 0.0;
     int i, j;
+    /* The three springs' dispersion chains, one stage of each at a time. */
+    for (j = 0; j < TANK_AP; ++j) {
+        const double y0 = TANK_AP_COEF * (f0 - ay[j][0]) + ax[j][0];
+        const double y1 = TANK_AP_COEF * (f1 - ay[j][1]) + ax[j][1];
+        const double y2 = TANK_AP_COEF * (f2 - ay[j][2]) + ax[j][2];
+        ax[j][0] = f0;
+        ax[j][1] = f1;
+        ax[j][2] = f2;
+        ay[j][0] = f0 = y0;
+        ay[j][1] = f1 = y1;
+        ay[j][2] = f2 = y2;
+    }
+    t->ph = t->ph + 1 == t->stretch ? 0 : t->ph + 1;
+    fb[0] = f0;
+    fb[1] = f1;
+    fb[2] = f2;
     for (i = 0; i < TANK_SPRINGS; ++i) {
         Spring* s = &t->s[i];
-        const int k = s->ph;
-        double fb = s->buf[(s->w - s->d2) & s->mask], y;
-        for (j = 0; j < TANK_AP; ++j) {
-            const double yy = TANK_AP_COEF * (fb - s->ap_y[j][k]) + s->ap_x[j][k];
-            s->ap_x[j][k] = fb;
-            s->ap_y[j][k] = yy;
-            fb = yy;
-        }
-        s->ph = (s->ph + 1) % s->stretch;
-        s->lp += s->lp_k * (fb - s->lp);
+        double y;
+        s->lp += s->lp_k * (fb[i] - s->lp);
         y = s->lp - s->dc_x + 0.995 * s->dc_y;
         s->dc_x = s->lp;
         s->dc_y = y + 1e-18; /* the tiny offset keeps the loop out of denormals */

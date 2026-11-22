@@ -105,6 +105,22 @@ static double ap1_coef(double f, double fs)
     return (t - 1.0) / (t + 1.0);
 }
 
+/* sin(2 pi p) for a phase p in 0..1, without a library call: folded to a quarter cycle and a
+ * Taylor series to the 9th power, accurate to about 4e-6. For the wow oscillators, whose
+ * whole effect is a few hundredths of a percent of tape speed. */
+static inline double sin_cycle(double p)
+{
+    double x = p < 0.5 ? p : p - 1.0; /* -0.5..0.5 */
+    double z, z2;
+    if (x > 0.25)
+        x = 0.5 - x;
+    else if (x < -0.25)
+        x = -0.5 - x;
+    z = 2.0 * AL_PI * x;
+    z2 = z * z;
+    return z * (1.0 - z2 / 6.0 * (1.0 - z2 / 20.0 * (1.0 - z2 / 42.0 * (1.0 - z2 / 72.0))));
+}
+
 /* Linear up to the knee, then rounds off smoothly toward the ceiling. */
 static inline double soft_limit(double v, double ceiling)
 {

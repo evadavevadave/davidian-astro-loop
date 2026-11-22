@@ -200,6 +200,8 @@ ctest --test-dir build-cmake -C Release
 
 Both sound comparisons cover parameter changes and the host's bypass, and expect the output to match the LV2 build exactly.
 
+CPU: under 1% of one core at 48 kHz, with the defaults or with every control at full (measured on the development machine; twice that at 96 kHz).
+
 GitHub Actions builds and tests all four platforms from the same source on every push (see `.github/workflows/build.yml`), and publishes a release when a version is tagged.
 
 ## Use of AI

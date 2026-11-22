@@ -85,12 +85,16 @@ struct AlEngine {
 
     double speed; /* cm/s */
     double k_ctrl, k_bypass, k_slower, k_faster, k_drift, drift_norm, k_vu;
+    double inv_fs, k_roller, k_capstan; /* 1 / fs, and cm of tape to turns of the pinch roller and capstan per sample */
     double in_g, rec_on, intensity, echo_g, rev_g, out_g, mix, bass, treble;
     double head_g[3], rev_on;
     double ph_roller, ph_capstan, drift1, drift2;
     unsigned rng;
     int coef_count;
     double vu;
+    /* The values the speed and tone filters were last designed for: they are only redesigned
+     * when one of these changes, so a settled motor and still knobs cost nothing. */
+    double designed_speed, designed_age, designed_bass, designed_treble;
 
     Biquad rec_hp, pre, de, gap, bump, loop_hp, bass_f, treble_f;
 };
@@ -114,13 +118,22 @@ static double target_speed(const AlEngine* e)
 
 static void update_speed_filters(AlEngine* e, double age)
 {
-    double gap = GAP_HZ_TOP * pow(e->speed / TAPE_SPEED_MAX, 0.75) * (1.0 - 0.4 * clamp01(age));
+    double gap;
+    if (e->speed == e->designed_speed && age == e->designed_age)
+        return;
+    e->designed_speed = e->speed;
+    e->designed_age = age;
+    gap = GAP_HZ_TOP * pow(e->speed / TAPE_SPEED_MAX, 0.75) * (1.0 - 0.4 * clamp01(age));
     bq_lowpass(&e->gap, gap, 0.65, e->fs);
     bq_peak(&e->bump, e->speed / BUMP_CM, 1.0, BUMP_DB, e->fs);
 }
 
 static void update_tone(AlEngine* e)
 {
+    if (e->bass == e->designed_bass && e->treble == e->designed_treble)
+        return;
+    e->designed_bass = e->bass;
+    e->designed_treble = e->treble;
     bq_lowshelf(&e->bass_f, BASS_HZ, (2.0 * e->bass - 1.0) * BASS_DB, e->fs);
     bq_highshelf(&e->treble_f, TREBLE_HZ, (2.0 * e->treble - 1.0) * TREBLE_DB, e->fs);
 }
@@ -143,6 +156,9 @@ AlEngine* al_engine_new(double fs)
     /* Two one-pole stages of uniform noise: scale to unit standard deviation. */
     e->drift_norm = 1.0 / sqrt((1.0 / 3.0) * e->k_drift / 4.0);
     e->k_vu = smooth_coef(0.3 / 2.2, fs); /* VU ballistics: 300 ms to 99% */
+    e->inv_fs = 1.0 / fs;
+    e->k_roller = 1.0 / (ROLLER_CM * fs);
+    e->k_capstan = 1.0 / (CAPSTAN_CM * fs);
     bq_highpass(&e->rec_hp, 40.0, 0.5, fs);
     bq_highshelf(&e->pre, EMPH_HZ, EMPH_DB, fs);
     bq_highshelf(&e->de, EMPH_HZ, -EMPH_DB, fs);
@@ -199,6 +215,7 @@ void al_engine_activate(AlEngine* e)
     e->rng = 0x2545F491u;
     e->coef_count = 0;
     e->vu = 0.0;
+    e->designed_speed = e->designed_age = e->designed_bass = e->designed_treble = -1.0; /* none yet */
     update_speed_filters(e, ctl(e, PORT_AGE, 0.2f));
     update_tone(e);
 }
@@ -260,16 +277,16 @@ void al_engine_run(AlEngine* e, uint32_t n)
 
         /* Motor and transport */
         e->speed += (v_target - e->speed) * (v_target < e->speed ? e->k_slower : e->k_faster);
-        e->ph_roller += e->speed / ROLLER_CM / e->fs;
-        e->ph_capstan += e->speed / CAPSTAN_CM / e->fs;
+        e->ph_roller += e->speed * e->k_roller;
+        e->ph_capstan += e->speed * e->k_capstan;
         e->ph_roller -= floor(e->ph_roller);
         e->ph_capstan -= floor(e->ph_capstan);
         e->drift1 += e->k_drift * (rng_next(&e->rng) - e->drift1);
         e->drift2 += e->k_drift * (e->drift1 - e->drift2);
         w = wow_scale * (WOW_DRIFT * e->drift2 * e->drift_norm
-                         + WOW_ROLLER * sin(2.0 * AL_PI * e->ph_roller)
-                         + WOW_CAPSTAN * sin(2.0 * AL_PI * e->ph_capstan));
-        tape_advance(&e->tape, e->speed * (1.0 + w) / e->fs);
+                         + WOW_ROLLER * sin_cycle(e->ph_roller)
+                         + WOW_CAPSTAN * sin_cycle(e->ph_capstan));
+        tape_advance(&e->tape, e->speed * (1.0 + w) * e->inv_fs);
         if (++e->coef_count >= COEF_EVERY) {
             e->coef_count = 0;
             update_speed_filters(e, age);
