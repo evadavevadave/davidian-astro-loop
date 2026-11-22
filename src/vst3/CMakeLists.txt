@@ -36,6 +36,14 @@ if(WIN32)
 elseif(APPLE)
     set_source_files_properties(../ui/view.c PROPERTIES LANGUAGE OBJC)
     target_link_libraries(astro_loop_vst3 PRIVATE "-framework Cocoa")
+else()
+    find_package(X11 REQUIRED) # the editor's X11 window layer
+    target_include_directories(astro_loop_vst3 PRIVATE ${X11_INCLUDE_DIR})
+    target_link_libraries(astro_loop_vst3 PRIVATE ${X11_LIBRARIES})
+endif()
+if(NOT MSVC)
+    # The same floating-point code as the LV2 build: no fused multiply-adds.
+    target_compile_options(astro_loop_vst3 PRIVATE -ffp-contract=off)
 endif()
 
 # The library sits in Contents/<arch>; the documents go in Contents/Resources. (The SDK's own

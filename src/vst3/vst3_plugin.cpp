@@ -333,8 +333,8 @@ public:
 #elif defined(__APPLE__)
         return std::strcmp(type, kPlatformTypeNSView) == 0 ? kResultTrue : kResultFalse;
 #else
-        (void)type;
-        return kResultFalse; /* X11 embedding would need the host's run loop */
+        /* X11. The host's run loop (from the plug frame, once attached) drives events and redraws. */
+        return std::strcmp(type, kPlatformTypeX11EmbedWindowID) == 0 ? kResultTrue : kResultFalse;
 #endif
     }
 
@@ -353,6 +353,11 @@ public:
             if (AL_PARAMS[i].port != PORT_ENABLED)
                 al_view_set(view, AL_PARAMS[i].port, controller->plain(AL_PARAMS[i].port));
         controller->editor = this;
+#if !defined(_WIN32) && !defined(__APPLE__)
+        timer.editor = this;
+        if (FUnknownPtr<Linux::IRunLoop> loop = FUnknownPtr<Linux::IRunLoop>(plugFrame))
+            loop->registerTimer(&timer, 30);
+#endif
         return CPluginView::attached(parent, type);
     }
 
@@ -371,8 +376,38 @@ public:
     }
 
 private:
+#if !defined(_WIN32) && !defined(__APPLE__)
+    /* The host's run loop calls this about 30 times a second; the X11 panel has no thread of
+     * its own, so this is where it reads its events and redraws. */
+    struct Timer : Linux::ITimerHandler {
+        Editor* editor = nullptr;
+        void PLUGIN_API onTimer() override
+        {
+            if (editor && editor->view)
+                al_view_idle(editor->view);
+        }
+        tresult PLUGIN_API queryInterface(const TUID iid, void** obj) override
+        {
+            if (FUnknownPrivate::iidEqual(iid, Linux::ITimerHandler::iid) || FUnknownPrivate::iidEqual(iid, FUnknown::iid)) {
+                *obj = this;
+                return kResultOk;
+            }
+            *obj = nullptr;
+            return kNoInterface;
+        }
+        /* Owned by the editor, which unregisters it before it goes. */
+        uint32 PLUGIN_API addRef() override { return 1; }
+        uint32 PLUGIN_API release() override { return 1; }
+    } timer;
+#endif
+
     void close()
     {
+#if !defined(_WIN32) && !defined(__APPLE__)
+        if (view)
+            if (FUnknownPtr<Linux::IRunLoop> loop = FUnknownPtr<Linux::IRunLoop>(plugFrame))
+                loop->unregisterTimer(&timer);
+#endif
         if (controller->editor == this)
             controller->editor = nullptr;
         al_view_close(view);

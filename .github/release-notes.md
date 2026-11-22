@@ -1,6 +1,11 @@
-Ready-made **Davidian Astro-Loop** plugins for Windows, macOS and Linux, built and tested from the same source by GitHub Actions. A three-head tape echo with spring reverb, as an LV2, a **VST3** for Windows and an **Audio Unit** for macOS. This release has a new spring reverb and a faster engine.
+Ready-made **Davidian Astro-Loop** plugins for Windows, macOS and Linux, built and tested from the same source by GitHub Actions. A three-head tape echo with spring reverb, as an LV2, a **VST3** for Windows and Linux, and an **Audio Unit** for macOS. This release adds the Linux VST3.
 
-## What's new in 1.1
+## What's new in 1.2
+
+- **VST3 for Linux**, on 64-bit x86 and ARM, with the same panel as the other formats. It needs glibc 2.34 or later (Ubuntu 22.04, Debian 12) and an X11 or XWayland session.
+- The sound is the same as 1.1.
+
+## New in 1.1
 
 - **New spring reverb.** It is now the same model of the three-spring tank that the Davidian Jade Choir uses. Each spring is a delay line with a falling chirp on every return. The first return arrives at about 30 ms and the reverb dies away in about 2 seconds. The Reverb knob gives the same level as in 1.0.
 - **About 1.7× faster.** The plugin uses under 1% of one CPU core at 48 kHz, even with every control at full. Apart from the new reverb, the sound is unchanged: the largest difference is 132 dB below peak, far below hearing.
@@ -12,14 +17,14 @@ Ready-made **Davidian Astro-Loop** plugins for Windows, macOS and Linux, built a
 |---|---|---|
 | `...-windows-x64.zip` | 64-bit Windows 10 and 11 | VST3 and LV2 |
 | `...-macos-universal.zip` | macOS 10.13 and later, Apple silicon and Intel | Audio Unit and LV2 |
-| `...-linux-x64.zip` | 64-bit Linux on x86 (glibc 2.29 or later, such as Ubuntu 20.04 or Debian 11) | LV2 |
-| `...-linux-arm64.zip` | 64-bit Linux on ARM, such as a Raspberry Pi 4 or 5 | LV2 |
+| `...-linux-x64.zip` | 64-bit Linux on x86 (LV2: glibc 2.29 or later, such as Ubuntu 20.04 or Debian 11; VST3: glibc 2.34 or later, such as Ubuntu 22.04 or Debian 12) | VST3 and LV2 |
+| `...-linux-arm64.zip` | 64-bit Linux on ARM, such as a Raspberry Pi 4 or 5 (same glibc needs) | VST3 and LV2 |
 
 ## Install
 
 Unzip, close your host, and copy the format it uses:
 
-- **VST3 (Windows):** copy the `Davidian Astro-Loop.vst3` folder into `C:\Program Files\Common Files\VST3`.
+- **VST3:** copy the `Davidian Astro-Loop.vst3` folder into `C:\Program Files\Common Files\VST3` (Windows) or `~/.vst3` (Linux).
 - **Audio Unit (macOS):** copy `Davidian Astro-Loop.component` into `~/Library/Audio/Plug-Ins/Components`. It isn't notarised, so clear the download quarantine once in Terminal: `xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/"Davidian Astro-Loop.component"`.
 - **LV2:** copy the `astro_loop.lv2` folder into `%APPDATA%\LV2` (Windows), `~/Library/Audio/Plug-Ins/LV2` (macOS, then clear the quarantine the same way) or `~/.lv2` (Linux).
 
@@ -36,7 +41,7 @@ Restart the host (or rescan its plugins) and look for **Astro-Loop** by **Davidi
 ## Testing status
 
 - Every build passes the DSP tests (including a check of the spring reverb's first return and decay time) and the GUI render test.
-- **VST3:** passes Steinberg's validator. A test host drives its editor with simulated mouse input, and its output matches the LV2 build sample for sample.
+- **VST3:** passes Steinberg's validator on Windows and on Linux (x86 and ARM). On Windows, a test host drives its editor with simulated mouse input, and its output matches the LV2 build sample for sample. The Linux editor hasn't been opened in a host yet.
 - **Audio Unit:** built and checked only by CI on macOS: Apple's `auval` in strict mode for Apple silicon and Intel, and a test host that compares its output with the LV2 build.
 - The Linux bundles are also checked with the lilv LV2 parser.
 - Not yet tried in a DAW by a person, and not compared with a real unit.

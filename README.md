@@ -11,7 +11,7 @@ Stereo in and out with no latency. The tape and springs are mono, as on the unit
 | Format | Windows | macOS | Linux |
 |---|---|---|---|
 | LV2 | yes | yes | yes |
-| VST3 | yes | | |
+| VST3 | yes | | yes |
 | Audio Unit (AUv2) | | yes | |
 
 The Windows builds are tested locally. The macOS and Linux builds are built and tested by GitHub Actions (see [Tests](#tests)).
@@ -24,14 +24,15 @@ Ready-made builds are on the [Releases page](https://github.com/evadavevadave/da
 |---|---|---|
 | `…-windows-x64.zip` | LV2, VST3 | Windows 10/11, 64-bit hosts |
 | `…-macos-universal.zip` | LV2, Audio Unit | macOS 10.13 or later, Apple silicon and Intel |
-| `…-linux-x64.zip` | LV2 | 64-bit Intel/AMD Linux (glibc 2.29 or later, e.g. Ubuntu 20.04 or Debian 11; X11 or XWayland for the GUI) |
-| `…-linux-arm64.zip` | LV2 | 64-bit ARM Linux, e.g. Raspberry Pi 4/5 with a 64-bit OS |
+| `…-linux-x64.zip` | LV2, VST3 | 64-bit Intel/AMD Linux (LV2: glibc 2.29 or later, e.g. Ubuntu 20.04 or Debian 11; VST3: glibc 2.34 or later, e.g. Ubuntu 22.04 or Debian 12; X11 or XWayland for the GUI) |
+| `…-linux-arm64.zip` | LV2, VST3 | 64-bit ARM Linux, e.g. Raspberry Pi 4/5 with a 64-bit OS (same glibc needs as x64) |
 
 Unzip, copy the plugin folder for your host's format into its plugin folder, and restart your host (or rescan plugins):
 
 | Format | Copy | Into |
 |---|---|---|
 | VST3 (Windows) | `Davidian Astro-Loop.vst3` | `C:\Program Files\Common Files\VST3` |
+| VST3 (Linux) | `Davidian Astro-Loop.vst3` | `~/.vst3` |
 | Audio Unit (macOS) | `Davidian Astro-Loop.component` | `~/Library/Audio/Plug-Ins/Components` (or `/Library/Audio/Plug-Ins/Components` for all users) |
 | LV2 (Windows) | `astro_loop.lv2` | `%APPDATA%\LV2` (create it if it doesn't exist) |
 | LV2 (macOS) | `astro_loop.lv2` | `~/Library/Audio/Plug-Ins/LV2` |
@@ -148,7 +149,7 @@ build.bat
 
 ### Every platform (CMake)
 
-Needs CMake 3.25 or later and a C/C++ compiler. On macOS, the Xcode command-line tools; add `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` for a universal build. On Linux, gcc or clang plus the X11 headers (`libx11-dev` on Debian/Ubuntu) for the GUI; without them CMake builds the plugin alone.
+Needs CMake 3.25 or later and a C/C++ compiler. On macOS, the Xcode command-line tools; add `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` for a universal build. On Linux, gcc or clang plus the X11 headers (`libx11-dev` on Debian/Ubuntu) for the GUI. The VST3 needs them too, and the VST3 SDK's validator build asks for the packages listed under "Install Linux packages" in `.github/workflows/build.yml`. With `-DASTRO_LOOP_VST3=OFF` and no X11 headers, CMake builds the LV2 plugin without its GUI.
 
 ```bash
 cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
@@ -158,7 +159,7 @@ cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
 cmake --build build-cmake --config Release
 ```
 
-The VST3 lands in `build-cmake\VST3\Release` (Windows) and the Audio Unit in `build-cmake/AU` (macOS, signed ad hoc). They are on by default on Windows and macOS respectively; turn them off with `-DASTRO_LOOP_VST3=OFF` or `-DASTRO_LOOP_AU=OFF`, for example to build offline.
+The VST3 lands in `build-cmake/VST3/Release` (Windows and Linux) and the Audio Unit in `build-cmake/AU` (macOS, signed ad hoc). The VST3 is on by default on Windows and Linux, the Audio Unit on macOS; turn them off with `-DASTRO_LOOP_VST3=OFF` or `-DASTRO_LOOP_AU=OFF`, for example to build offline.
 
 To copy the LV2 bundle into `~/.lv2` (Linux):
 

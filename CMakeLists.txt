@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Builds the LV2 bundle on any platform, plus the VST3 plugin (Windows) and the Audio Unit
-# (macOS). On Windows, build.bat builds the LV2 bundle without CMake.
+# Builds the LV2 bundle on any platform, plus the VST3 plugin (Windows and Linux) and the Audio
+# Unit (macOS). On Windows, build.bat builds the LV2 bundle without CMake.
 cmake_minimum_required(VERSION 3.16)
-project(astro_loop VERSION 1.1.0 LANGUAGES C)
+project(astro_loop VERSION 1.2.0 LANGUAGES C)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release)
@@ -10,7 +10,12 @@ endif()
 
 # The extra formats download their SDKs while configuring (both permissively licensed; see
 # NOTICE.md). The VST3 SDK needs CMake 3.25 or later.
-option(ASTRO_LOOP_VST3 "Build the VST3 plugin (fetches the Steinberg VST3 SDK)" ${WIN32})
+if(APPLE)
+    set(AL_VST3_DEFAULT OFF) # macOS gets the Audio Unit
+else()
+    set(AL_VST3_DEFAULT ON)
+endif()
+option(ASTRO_LOOP_VST3 "Build the VST3 plugin (fetches the Steinberg VST3 SDK)" ${AL_VST3_DEFAULT})
 option(ASTRO_LOOP_AU "Build the Audio Unit (macOS; fetches the Apple AudioUnitSDK)" ${APPLE})
 
 if(WIN32)

@@ -11,7 +11,7 @@
 	doap:license <https://spdx.org/licenses/GPL-3.0-or-later> ;
 	rdfs:comment "Model of a classic three-head tape echo with spring reverb, from its 1978 service notes: endless tape loop with three playback heads and a twelve-position mode selector, tape saturation and motor ballistics, intensity regeneration, bass and treble on the echo, and a three-spring reverb. GPL-3.0-or-later. Made with generative AI (Claude Code); see AI_USAGE.md in the bundle." ;
 	lv2:minorVersion 0 ;
-	lv2:microVersion 2 ;
+	lv2:microVersion 4 ;
 	lv2:optionalFeature lv2:hardRTCapable ;
 	lv2:port [
 		a lv2:AudioPort , lv2:InputPort ;
